@@ -33,17 +33,20 @@ get_affected_containers() {
     log_message "Identifying containers using volumes in $SOURCE_DIR..."
     
     # Get all running containers
-    local containers=$(docker ps --format '{{.ID}}')
+    local containers
+    containers=$(docker ps --format '{{.ID}}')
     
     # Check each container for volumes in SOURCE_DIR
     for container_id in $containers; do
         # Get volume mounts for this container
-        local mounts=$(docker inspect --format='{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' "$container_id")
+        local mounts
+        mounts=$(docker inspect --format='{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' "$container_id")
         
         # Check if any mount points are in SOURCE_DIR
         if echo "$mounts" | grep -q "^$SOURCE_DIR"; then
             # Get container name for better logging
-            local container_name=$(docker inspect --format='{{.Name}}' "$container_id" | sed 's/\///')
+            local container_name
+            container_name=$(docker inspect --format='{{.Name}}' "$container_id" | sed 's/\///')
             CONTAINER_STATES["$container_id"]="$container_name"
             log_message "Container $container_name ($container_id) uses volumes in backup directory"
         fi
@@ -108,20 +111,17 @@ start_containers() {
 create_backup() {
     log_message "Creating backup using temporary container..."
     
-    # Create backup using a temporary container with access to the source directory
     if docker run --rm \
         --name "$BACKUP_CONTAINER_NAME" \
         -v "$SOURCE_DIR:/backup/source:ro" \
         -v "$BACKUP_DIR:/backup/dest:rw" \
         alpine:latest \
         tar -czf "/backup/dest/$ARCHIVE_NAME" -C /backup/source .; then
-        
         log_message "Backup container completed successfully"
         return 0
-    else
-        log_message "Backup container failed"
-        return 1
     fi
+    log_message "Backup container failed"
+    return 1
 }
 
 # Function to cleanup old backups
@@ -129,10 +129,11 @@ cleanup_old_backups() {
     log_message "Starting cleanup of old backups..."
     
     # List all backup files sorted by date (oldest first)
-    local backup_files=($(ls -t "$BACKUP_DIR"/backup-*.tar.gz 2>/dev/null))
+    local backup_files
+    readarray -t backup_files < <(ls -t "$BACKUP_DIR"/backup-*.tar.gz 2>/dev/null)
     local total_backups=${#backup_files[@]}
     
-    if [ $total_backups -le $KEEP_LAST ]; then
+    if [ "$total_backups" -le $KEEP_LAST ]; then
         log_message "No cleanup needed. Current backups ($total_backups) <= maximum allowed ($KEEP_LAST)"
         return 0
     fi
@@ -142,14 +143,11 @@ cleanup_old_backups() {
     log_message "Found $total_backups backups, removing $files_to_delete old backup(s)..."
     
     # Remove the oldest backups
-    for ((i = $((total_backups - 1)); i >= $KEEP_LAST; i--)); do
-        if [ -f "${backup_files[i]}" ]; then
-            rm "${backup_files[i]}"
-            if [ $? -eq 0 ]; then
-                log_message "Deleted old backup: ${backup_files[i]}"
-            else
-                log_message "Failed to delete backup: ${backup_files[i]}"
-            fi
+    for ((i = total_backups - 1; i >= KEEP_LAST; i--)); do
+        if rm "${backup_files[i]}"; then
+            log_message "Deleted old backup: ${backup_files[i]}"
+        else
+            log_message "Failed to delete backup: ${backup_files[i]}"
         fi
     done
     
@@ -169,27 +167,20 @@ check_docker
 get_affected_containers
 stop_containers
 
-START_TIME=$(date +%s)  # Record start time
+START_TIME=$(date +%s)
 
 # Create backup using temporary container
-create_backup
-BACKUP_STATUS=$?
-
-# Check if backup was successful
-if [ $BACKUP_STATUS -eq 0 ]; then
+if create_backup; then
     log_message "Backup completed successfully."
-    
-    # Clean up old backups only if the new backup was successful
     cleanup_old_backups
 else
     log_message "Backup failed. Check the logs for details."
     exit 1
 fi
 
-END_TIME=$(date +%s)  # Record end time
+END_TIME=$(date +%s)
 ELAPSED_TIME=$((END_TIME - START_TIME))
 
-# Log the duration of the backup process
 log_message "Backup process completed in $ELAPSED_TIME seconds."
 
 # Start containers (will also be called by trap if script fails)
