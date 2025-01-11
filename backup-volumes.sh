@@ -28,6 +28,8 @@ check_docker() {
     fi
 }
 
+# Remove or comment the following line if you are using this script directly and not as ansible template
+{% raw %}
 # Function to get running containers that use volumes in SOURCE_DIR
 get_affected_containers() {
     log_message "Identifying containers using volumes in $SOURCE_DIR..."
@@ -153,7 +155,8 @@ cleanup_old_backups() {
     
     log_message "Cleanup completed"
 }
-
+# Remove or comment the following line if you are using this script directly and not as ansible template
+{$ endraw %}
 # Set up trap to ensure containers are started even if script fails
 trap 'start_containers' EXIT
 

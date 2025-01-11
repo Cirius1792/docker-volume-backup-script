@@ -2,6 +2,7 @@
 
 A robust shell script for safely backing up Docker volumes while managing container states and maintaining a clean backup history.
 
+If you are not usign it with ansible, please remember to remove the jinja2 escape sequences where marked in the file. 
 ## Features
 
 - 🔄 Automatically detects and manages containers using specified volumes
